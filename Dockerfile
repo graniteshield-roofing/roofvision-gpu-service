@@ -1,109 +1,35 @@
 # RoofVision Measurement Service
-# Multi-stage build for production deployment
+# Simplified build for Windows Docker Desktop
 
-# Stage 1: Build dependencies
-FROM python:3.11-slim as builder
+# Use standard Python image (COLMAP will be installed via apt)
+FROM python:3.11-slim
 
 WORKDIR /app
 
-# Install build dependencies
+# Install system dependencies including COLMAP
 RUN apt-get update && apt-get install -y --no-install-recommends \
     build-essential \
     cmake \
     git \
+    curl \
     libgl1-mesa-glx \
     libglib2.0-0 \
+    libgomp1 \
+    colmap \
     && rm -rf /var/lib/apt/lists/*
 
 # Copy requirements
 COPY requirements.txt .
 
 # Install Python dependencies
-RUN pip install --no-cache-dir --user -r requirements.txt
-
-
-# Stage 2: COLMAP installation
-FROM nvidia/cuda:12.1-devel-ubuntu22.04 as colmap-builder
-
-# Install COLMAP build dependencies
-RUN apt-get update && apt-get install -y --no-install-recommends \
-    git \
-    cmake \
-    ninja-build \
-    build-essential \
-    libboost-program-options-dev \
-    libboost-filesystem-dev \
-    libboost-graph-dev \
-    libboost-system-dev \
-    libeigen3-dev \
-    libflann-dev \
-    libfreeimage-dev \
-    libmetis-dev \
-    libgoogle-glog-dev \
-    libgtest-dev \
-    libsqlite3-dev \
-    libglew-dev \
-    qtbase5-dev \
-    libqt5opengl5-dev \
-    libcgal-dev \
-    libceres-dev \
-    && rm -rf /var/lib/apt/lists/*
-
-# Clone and build COLMAP
-RUN git clone https://github.com/colmap/colmap.git /colmap && \
-    cd /colmap && \
-    git checkout 3.8 && \
-    mkdir build && \
-    cd build && \
-    cmake .. -GNinja \
-        -DCMAKE_BUILD_TYPE=Release \
-        -DCMAKE_CUDA_ARCHITECTURES="75;80;86;89" && \
-    ninja && \
-    ninja install
-
-
-# Stage 3: Production image
-FROM nvidia/cuda:12.1-runtime-ubuntu22.04
-
-WORKDIR /app
-
-# Install runtime dependencies
-RUN apt-get update && apt-get install -y --no-install-recommends \
-    python3.11 \
-    python3-pip \
-    libgl1-mesa-glx \
-    libglib2.0-0 \
-    libboost-program-options1.74.0 \
-    libboost-filesystem1.74.0 \
-    libboost-graph1.74.0 \
-    libboost-system1.74.0 \
-    libfreeimage3 \
-    libmetis5 \
-    libgoogle-glog0v5 \
-    libsqlite3-0 \
-    libglew2.2 \
-    libqt5core5a \
-    libqt5opengl5 \
-    libcgal-dev \
-    libceres2 \
-    && rm -rf /var/lib/apt/lists/*
-
-# Copy COLMAP from builder
-COPY --from=colmap-builder /usr/local/bin/colmap /usr/local/bin/colmap
-COPY --from=colmap-builder /usr/local/lib/colmap /usr/local/lib/colmap
-COPY --from=colmap-builder /usr/local/share/colmap /usr/local/share/colmap
-
-# Copy Python packages from builder
-COPY --from=builder /root/.local /root/.local
-ENV PATH=/root/.local/bin:$PATH
+RUN pip install --no-cache-dir -r requirements.txt
 
 # Copy application code
 COPY . .
 
 # Environment variables
 ENV PYTHONUNBUFFERED=1
-ENV COLMAP_BIN=/usr/local/bin/colmap
-ENV COLMAP_GPU_INDEX=0
+ENV COLMAP_BIN=/usr/bin/colmap
 
 # Expose port
 EXPOSE 8000
